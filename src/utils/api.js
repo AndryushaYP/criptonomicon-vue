@@ -14,3 +14,15 @@ export const search = (searchParams) => {
     return Promise.reject(`Ошибка: ${res.status}`);
   });
 };
+
+export const getCoins = () => {
+  return fetch("https://min-api.cryptocompare.com/data/all/coinlist?summary=true", {
+    method: "GET",
+  }).then((res) => {
+    if (res.ok) {
+      return res.json();
+    }
+
+    return Promise.reject(`Ошибка: ${res.status}`);
+  });
+};

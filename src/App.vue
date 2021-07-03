@@ -1,7 +1,43 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
+    <div
+      v-if="loader === true"
+      class="
+        fixed
+        w-100
+        h-100
+        opacity-80
+        bg-purple-800
+        inset-0
+        z-50
+        flex
+        items-center
+        justify-center
+      "
+    >
+      <svg
+        class="animate-spin -ml-1 mr-3 h-12 w-12 text-white"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <circle
+          class="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          stroke-width="4"
+        ></circle>
+        <path
+          class="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        ></path>
+      </svg>
+    </div>
+
     <div class="container">
-      <div class="w-full my-4"></div>
       <section>
         <div class="flex">
           <div class="max-w-xs">
@@ -9,7 +45,8 @@
             <div class="mt-1 relative rounded-md shadow-md">
               <input
                 v-model="searchWord"
-                v-on:keydown.enter="add"
+                v-on:keydown.enter="add()"
+                v-on:keyup="searchPromts"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -26,10 +63,37 @@
                 placeholder="Например DOGE"
               />
             </div>
+            <div
+              v-if="promts.length !== 0"
+              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
+            >
+              <span
+                v-for="(item, id) in promts"
+                @click="add(item.name)"
+                :key="id"
+                class="
+                  inline-flex
+                  items-center
+                  px-2
+                  m-1
+                  rounded-md
+                  text-xs
+                  font-medium
+                  bg-gray-300
+                  text-gray-800
+                  cursor-pointer
+                "
+              >
+                {{ item.name.toUpperCase() }}
+              </span>
+            </div>
+            <div v-if="showError === true" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
-          v-on:click="add"
+          @click="add()"
           type="button"
           class="
             my-4
@@ -170,7 +234,7 @@
 </template>
 
 <script>
-import { search } from "./utils/api";
+import { search, getCoins } from "./utils/api";
 export default {
   name: "App",
   data() {
@@ -179,34 +243,69 @@ export default {
       tickersCouple: [],
       selected: null,
       graph: [],
+      loader: false,
+      coinsList: [],
+      promts: [],
+      showError: false,
     };
   },
+  created: function () {
+    getCoins().then((res) => {
+      for (let key in res.Data) {
+        this.coinsList.push({
+          name: res.Data[key].Symbol.toLowerCase(),
+          fullName: res.Data[key].FullName.toLowerCase(),
+        });
+      }
+    });
+  },
   methods: {
-    add() {
-      const newTicker = {
-        name: this.searchWord,
-        price: "",
-        id: Math.random(),
-      };
-      this.tickersCouple.push(newTicker);
-      setInterval(async () => {
-        await search(newTicker.name)
-          .then((data) => {
-            this.tickersCouple.find((item) => {
-              if (item.name === newTicker.name) {
-                item.price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+    add(tickerName = this.searchWord) {
+      this.showError = this.tickersCouple.some(
+        (item) => item.name.toLowerCase() === tickerName.toLowerCase()
+      );
+      if (this.showError) {
+        return;
+      } else {
+        const newTicker = {
+          name: tickerName,
+          price: "",
+          id: Math.random(),
+        };
+        this.tickersCouple.push(newTicker);
+        setInterval(async () => {
+          await search(newTicker.name)
+            .then((data) => {
+              this.tickersCouple.find((item) => {
+                if (item?.name === newTicker.name) {
+                  item.price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+                }
+              });
+              if (this.selected?.name === newTicker.name) {
+                this.graph.push(data.USD);
               }
+            })
+            .catch((err) => {
+              console.log(`message: ${err}`);
             });
-            if (this.selected?.name === newTicker.name) {
-              this.graph.push(data.USD);
-            }
-          })
-          .catch((err) => {
-            console.log(`message: ${err}`);
-          });
-      }, 5000);
-      this.searchWord = "";
+        }, 5000);
+        this.promts = [];
+        this.searchWord = "";
+      }
     },
+    searchPromts() {
+      this.promts = [];
+      const promtsList = this.coinsList.filter(
+        (item) =>
+          (item.name.includes(this.searchWord.toLowerCase()) ||
+            item.fullName.includes(this.searchWord.toLowerCase())) &&
+          this.searchWord !== ""
+      );
+
+      console.log(promtsList);
+      this.promts = [...promtsList.slice(0, 4)];
+    },
+
     normalizeGraph() {
       const maxValue = Math.max(...this.graph);
       const minValue = Math.min(...this.graph);
@@ -220,10 +319,8 @@ export default {
     },
     deleteCouple(tickerDelete) {
       this.tickersCouple = this.tickersCouple.filter((item) => item !== tickerDelete);
-      if (tickerDelete.name === this.selected.name) {
-        this.selected = null;
-        this.graph = [];
-      }
+      this.selected = null;
+      this.graph = [];
     },
   },
 };
